@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>年上年下亲密关系倾向模式测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="data.js"></script>
+    <style>
+        :root {
+            --primary-color: #f7e7e9;
+            --secondary-color: #f3c7d0;
+            --accent-color: #e6a7b3;
+            --text-color: #333;
+            --border-color: #e0e0e0;
+            --shadow-color: rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+
+        #app {
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px var(--shadow-color);
+            padding: 30px;
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        h1, h2, h3 {
+            color: var(--accent-color);
+            margin-bottom: 20px;
+        }
+
+        p {
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        input[type="text"] {
+            width: calc(100% - 20px);
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: #fff;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin: 5px;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #d18d9b;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            position: relative;
+            height: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: var(--accent-color);
+            border-radius: 5px;
+            transition: width 0.3s ease-out;
+        }
+
+        #question-counter {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            color: var(--text-color);
+        }
+
+        .options-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin: 30px 0;
+            text-align: left;
+        }
+
+        .option-btn {
+            background-color: var(--secondary-color);
+            color: var(--text-color);
+            padding: 15px 20px;
+            border: 1px solid var(--accent-color);
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .option-btn:hover {
+            background-color: var(--accent-color);
+            color: #fff;
+            border-color: #d18d9b;
+        }
+
+        .option-btn.selected {
+            background-color: var(--accent-color);
+            color: #fff;
+            border-color: #d18d9b;
+            box-shadow: 0 0 0 3px #d18d9b;
+        }
+
+        .nav-btn {
+            padding: 10px 20px;
+        }
+
+        .chart-container {
+            max-width: 600px;
+            margin: 0 auto 30px;
+        }
+
+        .result-section {
+            background-color: var(--primary-color);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .result-section h4 {
+            margin: 0 0 10px;
+            color: var(--accent-color);
+        }
+
+        .result-section p {
+            font-size: 1em;
+            line-height: 1.6;
+        }
+
+        #archetype-result p {
+            font-style: italic;
+            font-weight: bold;
+        }
+
+        .age-preference-container {
+            margin: 30px 0;
+            background-color: var(--primary-color);
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .age-bar-container {
+            width: 100%;
+            background: linear-gradient(to right, #b3d1e6, var(--accent-color));
+            border-radius: 10px;
+            margin: 10px 0;
+            height: 30px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .age-indicator {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            background-color: white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+            transition: left 0.5s ease;
+        }
+
+        .age-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-weight: bold;
+        }
+
+        .age-label.left {
+            color: #6b9bc2;
+        }
+
+        .age-label.right {
+            color: #d18d9b;
+        }
+
+        .age-value {
+            position: absolute;
+            top: -25px;
+            transform: translateX(-50%);
+            background-color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .age-scores {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 600px) {
+            #app {
+                padding: 20px;
+            }
+            .option-btn {
+                font-size: 14px;
+                padding: 12px 15px;
+            }
+            .nav-btn {
+                width: 48%;
+                box-sizing: border-box;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 卡券验证页面 -->
+        <div id="coupon-screen" class="screen active">
+            <h1>年上年下亲密关系倾向模式测试</h1>
+            <p>请输入卡券密码以开始测试。</p>
+            <input type="text" id="coupon-input" placeholder="卡券密码">
+            <button id="verify-btn">验证并开始测试</button>
+            <p id="coupon-error" class="error-message"></p>
+        </div>
+
+        <!-- 测试开始页面 -->
+        <div id="start-screen" class="screen">
+            <h2>测试即将开始</h2>
+            <p>本测试将评估你的亲密关系倾向模式，共40个问题，预计需要10分钟完成。</p>
+            <p>请根据你的真实想法和感受进行选择，不要过多犹豫。</p>
+            <button id="start-test-btn">开始测试</button>
+        </div>
+
+        <!-- 测试页面 -->
+        <div id="test-screen" class="screen">
+            <div class="progress-container">
+                <div class="progress-bar" id="progress-bar"></div>
+                <span id="question-counter">1/40</span>
+            </div>
+            <h2 id="question-text"></h2>
+            <div id="options-container" class="options-container"></div>
+            <button id="prev-btn" class="nav-btn" disabled>上一题</button>
+            <button id="next-btn" class="nav-btn">下一题</button>
+        </div>
+
+        <!-- 结果页面 -->
+        <div id="result-screen" class="screen">
+            <h2>你的亲密关系模式分析</h2>
+            
+            <div class="age-preference-container">
+                <h3>年上年下倾向（0-100分）</h3>
+                <div class="age-bar-container">
+                    <div id="age-indicator" class="age-indicator" style="left: 50%"></div>
+                    <div id="age-value" class="age-value">50分</div>
+                </div>
+                <div class="age-labels">
+                    <span class="age-label left">年下</span>
+                    <span class="age-label right">年上</span>
+                </div>
+                <div class="age-scores">
+                    <span>年下倾向: <span id="younger-score">50</span>分</span>
+                    <span>年上倾向: <span id="older-score">50</span>分</span>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <canvas id="radarChart"></canvas>
+            </div>
+
+            <h3>维度概览</h3>
+            <div id="dimension-analysis" class="result-section"></div>
+
+            <h3>核心关系驱动力</h3>
+            <div id="core-drivers-analysis" class="result-section"></div>
+
+            <h3>你的关系倾向与模式</h3>
+            <div id="tendencies-patterns-analysis" class="result-section"></div>
+
+            <h3>你的关系优势</h3>
+            <div id="strengths-analysis" class="result-section"></div>
+
+            <h3>你的核心关系原型</h3>
+            <div id="archetype-result" class="result-section"></div>
+
+            <button id="restart-btn" class="nav-btn">重新测试</button>
+        </div>
+    </div>
+
+    <script>
+        let currentQuestionIndex = 0;
+        let userAnswers = {};
+        let scores = {};
+        let radarChart = null;
+
+        // DOM元素
+        const couponScreen = document.getElementById('coupon-screen');
+        const couponInput = document.getElementById('coupon-input');
+        const verifyBtn = document.getElementById('verify-btn');
+        const couponError = document.getElementById('coupon-error');
+        const startScreen = document.getElementById('start-screen');
+        const startTestBtn = document.getElementById('start-test-btn');
+
+        const testScreen = document.getElementById('test-screen');
+        const questionText = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const progressBar = document.getElementById('progress-bar');
+        const questionCounter = document.getElementById('question-counter');
+
+        const resultScreen = document.getElementById('result-screen');
+        const dimensionAnalysisDiv = document.getElementById('dimension-analysis');
+        const coreDriversAnalysisDiv = document.getElementById('core-drivers-analysis');
+        const tendenciesPatternsAnalysisDiv = document.getElementById('tendencies-patterns-analysis');
+        const strengthsAnalysisDiv = document.getElementById('strengths-analysis');
+        const archetypeResultDiv = document.getElementById('archetype-result');
+        const restartBtn = document.getElementById('restart-btn');
+        const radarChartCanvas = document.getElementById('radarChart');
+        
+        const ageIndicator = document.getElementById('age-indicator');
+        const ageValue = document.getElementById('age-value');
+        const youngerScoreEl = document.getElementById('younger-score');
+        const olderScoreEl = document.getElementById('older-score');
+
+        // 显示指定页面
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        // 更新进度条
+        function updateProgressBar() {
+            const progress = ((currentQuestionIndex + 1) / questionsData.length) * 100;
+            progressBar.style.width = `${progress}%`;
+            questionCounter.textContent = `${currentQuestionIndex + 1}/${questionsData.length}`;
+        }
+
+        // 渲染当前问题
+        function renderQuestion() {
+            if (!questionsData || questionsData.length === 0) {
+                console.error('问题数据未加载');
+                return;
+            }
+            
+            const question = questionsData[currentQuestionIndex];
+            questionText.textContent = question.text;
+            optionsContainer.innerHTML = '';
+
+            question.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.className = 'option-btn';
+                button.textContent = option.text;
+                button.dataset.optionIndex = index;
+                button.addEventListener('click', () => selectOption(index));
+                optionsContainer.appendChild(button);
+            });
+
+            if (userAnswers[question.id] !== undefined) {
+                optionsContainer.children[userAnswers[question.id]].classList.add('selected');
+            }
+
+            prevBtn.disabled = currentQuestionIndex === 0;
+            nextBtn.textContent = currentQuestionIndex === questionsData.length - 1 ? '查看结果' : '下一题';
+            nextBtn.disabled = userAnswers[question.id] === undefined;
+        }
+
+        // 选择答案
+        function selectOption(optionIndex) {
+            const question = questionsData[currentQuestionIndex];
+            userAnswers[question.id] = optionIndex;
+
+            Array.from(optionsContainer.children).forEach((btn, idx) => {
+                if (idx === optionIndex) {
+                    btn.classList.add('selected');
+                } else {
+                    btn.classList.remove('selected');
+                }
+            });
+
+            nextBtn.disabled = false;
+        }
+
+        // 计算分数
+        function calculateScores() {
+            scores = {};
+            const allDimensions = Object.keys(dimensionDescriptions);
+            allDimensions.forEach(dim => {
+                scores[dim] = 0;
+            });
+
+            scores["年上倾向"] = 0;
+            scores["年下倾向"] = 0;
+
+            for (const questionId in userAnswers) {
+                const question = questionsData.find(q => q.id === parseInt(questionId));
+                if (question) {
+                    const selectedOptionIndex = userAnswers[questionId];
+                    const selectedOption = question.options[selectedOptionIndex];
+
+                    for (const dimension in selectedOption.scores) {
+                        if (dimension !== "情感") {
+                            scores[dimension] = (scores[dimension] || 0) + selectedOption.scores[dimension];
+                        }
+                    }
+
+                    scores["年上倾向"] += selectedOption.ageTendency.年上 || 0;
+                    scores["年下倾向"] += selectedOption.ageTendency.年下 || 0;
+                }
+            }
+            
+            for (const dim in scores) {
+                if (scores[dim] < 0) {
+                    scores[dim] = 0;
+                }
+            }
+
+            const totalAgeScore = scores["年上倾向"] + scores["年下倾向"];
+            if (totalAgeScore > 0) {
+                scores["年上倾向_标准化"] = Math.round((scores["年上倾向"] / totalAgeScore) * 100);
+                scores["年下倾向_标准化"] = 100 - scores["年上倾向_标准化"];
+            } else {
+                scores["年上倾向_标准化"] = 50;
+                scores["年下倾向_标准化"] = 50;
+            }
+        }
+
+        // 获取某类别的顶级维度
+        function getTopDimensionsByCategory(categoryPrefix, count = 1) {
+            const relevantDimensions = Object.keys(scores).filter(dim => 
+                dim.startsWith(categoryPrefix) && dim !== "情感"
+            );
+            const sortedDimensions = relevantDimensions.sort((a, b) => scores[b] - scores[a]);
+            return sortedDimensions.slice(0, count).filter(dim => scores[dim] > 0);
+        }
+
+        // 生成核心驱动力文本
+        function getCoreDriversText(scores) {
+            let text = "你的亲密关系最核心的驱动力在于：";
+            const topCoreAttraction = getTopDimensionsByCategory("核心引力");
+            const topPrimaryProvision = getTopDimensionsByCategory("主要供给");
+
+            if (topCoreAttraction.length > 0) {
+                const attractionDim = topCoreAttraction[0];
+                if (attractionDim === "核心引力(精神)") {
+                    text += "你深切渴望与伴侣在思想和灵魂层面达到高度共鸣，被对方的智慧与深度所吸引；";
+                } else if (attractionDim === "核心引力(欲望)") {
+                    text += "你追求与伴侣之间强烈的激情与吸引力，享受关系中的张力与活力；";
+                }
+            }
+
+            if (topPrimaryProvision.length > 0) {
+                const provisionDim = topPrimaryProvision[0];
+                if (provisionDim === "主要供给(安全感)") {
+                    text += "同时，你将关系视为避风港，最需要的是稳定、可靠和无条件的安全感。";
+                } else if (provisionDim === "主要供给(价值感)") {
+                    text += "同时，你渴望在关系中被伴侣肯定和需要，从中获得自我价值的实现。";
+                } else if (provisionDim === "主要供给(刺激感)") {
+                    text += "同时，你厌倦平淡，期待关系能持续带来新鲜感和激动人心的体验。";
+                }
+            }
+            return `<p>${text}</p>`;
+        }
+
+        // 生成关系倾向与模式文本
+        function getTendenciesPatternsText(scores) {
+            let text = "在亲密关系的日常互动中，你展现出以下倾向和模式：";
+            const topPowerStructure = getTopDimensionsByCategory("权力结构");
+            const topInteractionMode = getTopDimensionsByCategory("互动模式");
+            const topRelationshipBoundary = getTopDimensionsByCategory("关系边界");
+            const topEmotionalExpression = getTopDimensionsByCategory("情绪");
+            const topConflictResponse = getTopDimensionsByCategory("冲突应对");
+
+            if (topPowerStructure.length > 0) {
+                const psDim = topPowerStructure[0];
+                if (psDim === "权力结构(支配)") text += `在决策和引导方面，你倾向于${dimensionDescriptions[psDim].replace("你在关系中倾向于", "")}。`;
+                else if (psDim === "权力结构(依从)") text += `你乐于${dimensionDescriptions[psDim].replace("你倾向于", "")}。`;
+                else if (psDim === "权力结构(对等)") text += `你寻求${dimensionDescriptions[psDim].replace("你追求", "")}。`;
+            }
+
+            if (topInteractionMode.length > 0) {
+                const imDim = topInteractionMode[0];
+                if (imDim === "互动模式(协作)") text += `与伴侣的相处中，你重视${dimensionDescriptions[imDim].replace("你享受与伴侣作为“一个团队”", "")}。`;
+                else if (imDim === "互动模式(养成)") text += `你享受${dimensionDescriptions[imDim].replace("你享受在关系中", "")}。`;
+                else if (imDim === "互动模式(博弈)") text += `你可能享受${dimensionDescriptions[imDim].replace("你享受关系中", "")}。`;
+            }
+
+            if (topRelationshipBoundary.length > 0) {
+                const rbDim = topRelationshipBoundary[0];
+                if (rbDim === "关系边界(捆绑)") text += `在个人空间上，你渴望${dimensionDescriptions[rbDim].replace("你倾向于模糊彼此界限，", "")}。`;
+                else if (rbDim === "关系边界(独立)") text += `你重视${dimensionDescriptions[rbDim].replace("你倾向于", "")}。`;
+            }
+
+            if (topEmotionalExpression.length > 0) {
+                const eeDim = topEmotionalExpression[0];
+                if (eeDim === "情绪(内敛)") text += `表达情感时，你偏爱${dimensionDescriptions[eeDim].replace("你偏爱", "")}。`;
+                else if (eeDim === "情绪(外放)") text += `表达情感时，你偏爱${dimensionDescriptions[eeDim].replace("你偏爱", "")}。`;
+            }
+
+            if (topConflictResponse.length > 0) {
+                const crDim = topConflictResponse[0];
+                if (crDim === "冲突应对(掌控)") text += `面对冲突时，你倾向于${dimensionDescriptions[crDim].replace("你倾向于", "")}。`;
+                else if (crDim === "冲突应对(包容)") text += `面对冲突时，你倾向于${dimensionDescriptions[crDim].replace("你倾向于", "")}。`;
+            }
+            return `<p>${text}</p>`;
+        }
+
+        // 生成关系优势文本
+        function getStrengthsText(scores) {
+            let strengths = [];
+
+            if (scores["主要供给(安全感)"] > 15) strengths.push("能够为伴侣提供稳定和可预测性的关系基础，是坚实的依靠。");
+            else if (scores["主要供给(安全感)"] > 8) strengths.push("重视关系的稳定性和安全性。");
+            if (scores["主要供给(价值感)"] > 10) strengths.push("善于发现并肯定他人的价值，也能在关系中找到自我实现的途径。");
+            if (scores["核心引力(精神)"] > 10) strengths.push("追求精神层面的深度契合，能够与伴侣进行有意义的交流和共同成长。");
+            if (scores["互动模式(协作)"] > 10) strengths.push("是关系中的优秀合作者，乐于与伴侣共同面对和解决问题。");
+            if (scores["权力结构(对等)"] > 8) strengths.push("主张关系平等，尊重彼此的独立性和决策权。");
+            if (scores["冲突应对(包容)"] > 8) strengths.push("在冲突中展现出良好的包容性和理解力，有助于化解矛盾。");
+            if (scores["关系边界(独立)"] > 8) strengths.push("能够保持自我独立，尊重彼此的个人空间。");
+
+
+            let resultHtml = "";
+            if (strengths.length > 0) {
+                resultHtml += "<p>" + strengths.join("") + "</p>";
+            } else {
+                 resultHtml += "<p>你的关系模式具有独特的魅力，在多个方面展现出积极的特质，能够为亲密关系带来正向的能量。</p>";
+            }
+
+            return resultHtml;
+        }
+
+        // 渲染结果页面
+        function renderResults() {
+            dimensionAnalysisDiv.innerHTML = '';
+            coreDriversAnalysisDiv.innerHTML = '';
+            tendenciesPatternsAnalysisDiv.innerHTML = '';
+            strengthsAnalysisDiv.innerHTML = '';
+            archetypeResultDiv.innerHTML = '';
+
+            // 年上年下倾向显示（仅显示得分，不显示类型描述）
+            const olderScore = scores["年上倾向_标准化"] || 0;
+            const youngerScore = scores["年下倾向_标准化"] || 0;
+            
+            ageIndicator.style.left = `${olderScore}%`;
+            ageValue.style.left = `${olderScore}%`;
+            ageValue.textContent = `${olderScore}分`;
+            
+            // 直接显示得分
+            olderScoreEl.textContent = olderScore;
+            youngerScoreEl.textContent = youngerScore;
+
+            // 维度分析（排除情感维度）
+            const filteredDimensions = Object.keys(scores).filter(dim => {
+                return scores[dim] >= 5 && 
+                       !dim.includes("年上倾向") && 
+                       !dim.includes("年下倾向") &&
+                       dim !== "情感";
+            });
+            
+            if (filteredDimensions.length > 0) {
+                filteredDimensions.forEach(dim => {
+                    const score = scores[dim];
+                    const description = dimensionDescriptions[dim] || '';
+                    const dimEl = document.createElement('div');
+                    dimEl.innerHTML = `<h4>${dim} (得分: ${score})</h4><p>${description}</p>`;
+                    dimensionAnalysisDiv.appendChild(dimEl);
+                });
+            } else {
+                dimensionAnalysisDiv.innerHTML = "<p>没有达到5分以上的维度。</p>";
+            }
+
+            // 核心关系驱动力
+            coreDriversAnalysisDiv.innerHTML = getCoreDriversText(scores);
+
+            // 关系倾向与模式
+            tendenciesPatternsAnalysisDiv.innerHTML = getTendenciesPatternsText(scores);
+
+            // 关系优势
+            strengthsAnalysisDiv.innerHTML = getStrengthsText(scores);
+
+            // 核心关系原型
+            let matchedArchetypes = [];
+            archetypeResults.forEach(archetype => {
+                let isMatch = true;
+                let matchScore = 0;
+                for (const criterionDim in archetype.criteria) {
+                    const criterion = archetype.criteria[criterionDim];
+                    const currentScore = scores[criterionDim] || 0;
+                    if (criterion.min && currentScore < criterion.min) {
+                        isMatch = false;
+                        break;
+                    }
+                    if (criterion.max && currentScore > criterion.max) {
+                        isMatch = false;
+                        break;
+                    }
+                    if (criterion.min) {
+                        matchScore += currentScore;
+                    }
+                }
+                
+                if (isMatch && archetype.agePreference) {
+                    // 仅匹配年龄偏好，不显示描述
+                    const ageScore = scores["年上倾向_标准化"] || 0;
+                    let userAgePreference = "平衡";
+                    if (ageScore > 60) userAgePreference = "年上";
+                    else if (ageScore < 40) userAgePreference = "年下";
+                    
+                    if (archetype.agePreference !== "平衡" && 
+                        archetype.agePreference !== userAgePreference) {
+                        isMatch = false;
+                    }
+                }
+                
+                if (isMatch) {
+                    matchedArchetypes.push({ ...archetype, matchScore });
+                }
+            });
+
+            matchedArchetypes.sort((a, b) => b.matchScore - a.matchScore);
+
+            if (matchedArchetypes.length > 0) {
+                const mainArchetype = matchedArchetypes[0];
+                archetypeResultDiv.innerHTML = `<h3>${mainArchetype.name}</h3><p>${mainArchetype.description}</p>`;
+            } else {
+                const fallbackMatches = [];
+                archetypeResults.forEach(archetype => {
+                    let isFallbackMatch = true;
+                    let fallbackScore = 0;
+                    for (const criterionDim in archetype.criteria) {
+                        const criterion = archetype.criteria[criterionDim];
+                        const currentScore = scores[criterionDim] || 0;
+                        if (criterion.min && currentScore < criterion.min * 0.8) {
+                            isFallbackMatch = false;
+                            break;
+                        }
+                        if (criterion.max && currentScore > criterion.max * 1.2) {
+                            isFallbackMatch = false;
+                            break;
+                        }
+                        if (criterion.min) {
+                            fallbackScore += currentScore;
+                        }
+                    }
+                    if (isFallbackMatch) {
+                        fallbackMatches.push({ ...archetype, matchScore: fallbackScore });
+                    }
+                });
+                
+                if (fallbackMatches.length > 0) {
+                    fallbackMatches.sort((a, b) => b.matchScore - a.matchScore);
+                    const bestFit = fallbackMatches[0];
+                    archetypeResultDiv.innerHTML = `<h3>${bestFit.name}</h3><p>${bestFit.description}</p>`;
+                } else {
+                    archetypeResultDiv.innerHTML = `<h3>未能匹配到特定原型</h3><p>您的关系模式独特而复杂，包含了多种特质。请参考上方的维度解读，了解您的具体倾向。</p>`;
+                }
+            }
+
+
+            // 雷达图（排除情感维度）
+            const filteredLabels = filteredDimensions;
+            const filteredDataValues = filteredLabels.map(dim => scores[dim]);
+
+            if (radarChart) {
+                radarChart.destroy();
+            }
+
+            if (filteredLabels.length > 0) {
+                let maxScoreValue = 0;
+                filteredLabels.forEach(dim => {
+                    if (scores[dim] > maxScoreValue) {
+                        maxScoreValue = scores[dim];
+                    }
+                });
+                const radarChartScaleMax = Math.max(20, Math.ceil((maxScoreValue + 5) / 5) * 5);
+
+                radarChart = new Chart(radarChartCanvas, {
+                    type: 'radar',
+                    data: {
+                        labels: filteredLabels,
+                        datasets: [{
+                            label: '你的关系模式倾向',
+                            data: filteredDataValues,
+                            backgroundColor: 'rgba(230, 167, 179, 0.6)',
+                            borderColor: 'rgba(230, 167, 179, 1)',
+                            borderWidth: 2,
+                            pointBackgroundColor: 'rgba(230, 167, 179, 1)',
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: 'rgba(230, 167, 179, 1)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: {
+                            r: {
+                                angleLines: {
+                                    color: 'rgba(224, 224, 224, 0.8)'
+                                },
+                                grid: {
+                                    color: 'rgba(224, 224, 224, 0.8)'
+                                },
+                                pointLabels: {
+                                    color: 'var(--text-color)',
+                                    font: {
+                                        size: 14
+                                    }
+                                },
+                                ticks: {
+                                    beginAtZero: true,
+                                    max: radarChartScaleMax,
+                                    stepSize: Math.max(5, Math.ceil(radarChartScaleMax / 5 / 5) * 5),
+                                    color: 'var(--text-color)',
+                                    backdropColor: 'transparent'
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: 'var(--text-color)',
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                radarChartCanvas.style.display = "none";
+            }
+        }
+
+        // 卡券验证逻辑
+        async function verifyCoupon() {
+            const inputCode = couponInput.value.trim();
+            if (!inputCode) { 
+                couponError.textContent = '请输入卡券密码。'; 
+                return; 
+            }
+            
+            // Vika API配置
+            const API_TOKEN = 'uskDUbM4CPy64coNePFs9Uk'; 
+            const DATASHEET_ID = 'dstrXNob0ZGUawrLMg';
+            const CODE_FIELD_NAME = 'code';
+            const USED_FIELD_NAME = 'used';
+            
+            // 禁用按钮并显示加载状态
+            verifyBtn.disabled = true;
+            verifyBtn.textContent = '验证中...';
+            couponError.textContent = '';
+            
+            try {
+                // 查询卡券是否存在
+                const queryUrl = `https://api.vika.cn/fusion/v1/datasheets/${DATASHEET_ID}/records?filterByFormula={${CODE_FIELD_NAME}}="${inputCode}"&fieldKey=name`;
+                const queryResponse = await fetch(queryUrl, { 
+                    headers: { 'Authorization': `Bearer ${API_TOKEN}` } 
+                });
+                
+                if (!queryResponse.ok) {
+                    throw new Error(`网络错误: ${queryResponse.statusText}`);
+                }
+                
+                const queryResult = await queryResponse.json();
+                
+                // 检查查询结果
+                if (!queryResult.success || queryResult.data.records.length === 0) {
+                    couponError.textContent = '卡券不存在或无效';
+                } else {
+                    const record = queryResult.data.records[0];
+                    
+                    // 检查卡券是否已使用
+                    if (record.fields[USED_FIELD_NAME] === true) {
+                        couponError.textContent = '此卡券已被使用';
+                    } else {
+                        // 标记卡券为已使用
+                        const updateUrl = `https://api.vika.cn/fusion/v1/datasheets/${DATASHEET_ID}/records`;
+                        const updateResponse = await fetch(updateUrl, {
+                            method: 'PATCH',
+                            headers: { 
+                                'Authorization': `Bearer ${API_TOKEN}`, 
+                                'Content-Type': 'application/json' 
+                            },
+                            body: JSON.stringify({ 
+                                records: [{ 
+                                    recordId: record.recordId, 
+                                    fields: { [USED_FIELD_NAME]: true } 
+                                }], 
+                                fieldKey: 'name' 
+                            })
+                        });
+                        
+                        if (!updateResponse.ok) {
+                            throw new Error(`更新失败: ${updateResponse.statusText}`);
+                        }
+                        
+                        // 验证成功，进入测试开始页面
+                        showScreen('start-screen');
+                    }
+                }
+            } catch (error) {
+                console.error('验证出错:', error);
+                couponError.textContent = '验证服务出现问题，请稍后再试。';
+            } finally {
+                // 恢复按钮状态
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = '验证并开始测试';
+            }
+        }
+
+        // 事件监听
+        verifyBtn.addEventListener('click', verifyCoupon);
+        
+        startTestBtn.addEventListener('click', () => {
+            // 确保问题数据已加载
+            if (!questionsData || questionsData.length === 0) {
+                alert('测试数据加载失败，请刷新页面重试');
+                return;
+            }
+            showScreen('test-screen');
+            currentQuestionIndex = 0;
+            userAnswers = {};
+            renderQuestion();
+            updateProgressBar();
+        });
+
+        prevBtn.addEventListener('click', () => {
+            if (currentQuestionIndex > 0) {
+                currentQuestionIndex--;
+                renderQuestion();
+                updateProgressBar();
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (currentQuestionIndex < questionsData.length - 1) {
+                currentQuestionIndex++;
+                renderQuestion();
+                updateProgressBar();
+            } else {
+                calculateScores();
+                renderResults();
+                showScreen('result-screen');
+            }
+        });
+
+        restartBtn.addEventListener('click', () => {
+            currentQuestionIndex = 0;
+            userAnswers = {};
+            scores = {};
+            if (radarChart) {
+                radarChart.destroy();
+                radarChart = null;
+            }
+            couponInput.value = '';
+            showScreen('coupon-screen');
+        });
+
+        // 初始化检查
+        window.addEventListener('load', () => {
+            if (typeof questionsData === 'undefined' || 
+                typeof archetypeResults === 'undefined' || 
+                typeof dimensionDescriptions === 'undefined') {
+                console.error('数据加载失败，请确保data.js文件存在且正确引入');
+            }
+        });
+    </script>
+</body>
+</html>
