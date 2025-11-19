@@ -227,6 +227,7 @@
             color: #d18d9b;
         }
 
+        /* 隐藏浮动分数，避免视觉混淆 */
         .age-value {
             position: absolute;
             top: -25px;
@@ -237,6 +238,7 @@
             font-size: 14px;
             font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: none; 
         }
 
         .age-scores {
@@ -244,6 +246,33 @@
             justify-content: space-between;
             margin-top: 15px;
             font-weight: bold;
+        }
+
+        /* 加载状态样式 */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            display: none;
+        }
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--secondary-color);
+            border-top: 5px solid var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         @media (max-width: 600px) {
@@ -263,6 +292,11 @@
 </head>
 <body>
     <div id="app">
+        <!-- 加载遮罩层 -->
+        <div class="loading-overlay" id="loading-overlay">
+            <div class="loading-spinner"></div>
+        </div>
+
         <!-- 卡券验证页面 -->
         <div id="coupon-screen" class="screen active">
             <h1>年上年下亲密关系倾向模式测试</h1>
@@ -370,6 +404,17 @@
         const ageValue = document.getElementById('age-value');
         const youngerScoreEl = document.getElementById('younger-score');
         const olderScoreEl = document.getElementById('older-score');
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        // 显示加载状态
+        function showLoading() {
+            loadingOverlay.style.display = 'flex';
+        }
+
+        // 隐藏加载状态
+        function hideLoading() {
+            loadingOverlay.style.display = 'none';
+        }
 
         // 显示指定页面
         function showScreen(screenId) {
@@ -381,15 +426,16 @@
 
         // 更新进度条
         function updateProgressBar() {
-            const progress = ((currentQuestionIndex + 1) / questionsData.length) * 100;
+            const progress = ((currentQuestionIndex + 1) / (questionsData?.length || 40)) * 100;
             progressBar.style.width = `${progress}%`;
-            questionCounter.textContent = `${currentQuestionIndex + 1}/${questionsData.length}`;
+            questionCounter.textContent = `${currentQuestionIndex + 1}/${questionsData?.length || 40}`;
         }
 
         // 渲染当前问题
         function renderQuestion() {
             if (!questionsData || questionsData.length === 0) {
                 console.error('问题数据未加载');
+                alert('测试数据加载失败，请刷新页面重试');
                 return;
             }
             
@@ -421,362 +467,356 @@
             userAnswers[question.id] = optionIndex;
 
             Array.from(optionsContainer.children).forEach((btn, idx) => {
-                if (idx === optionIndex) {
-                    btn.classList.add('selected');
-                } else {
-                    btn.classList.remove('selected');
-                }
+                btn.classList.toggle('selected', idx === optionIndex);
             });
 
             nextBtn.disabled = false;
         }
 
-        // 计算分数
+        // 优化后的分数计算：减少重复遍历，缓存数据
         function calculateScores() {
-            scores = {};
-            const allDimensions = Object.keys(dimensionDescriptions);
-            allDimensions.forEach(dim => {
-                scores[dim] = 0;
-            });
+            try {
+                scores = {};
+                // 1. 提前缓存所有维度，避免重复遍历Object.keys
+                const allDimensions = Object.keys(dimensionDescriptions || {});
+                allDimensions.forEach(dim => {
+                    scores[dim] = 0;
+                });
+                scores["年上倾向"] = 0;
+                scores["年下倾向"] = 0;
 
-            scores["年上倾向"] = 0;
-            scores["年下倾向"] = 0;
+                // 2. 提前将questionsData转为Map，减少find的时间复杂度（O(n)→O(1)）
+                const questionMap = new Map(questionsData.map(q => [q.id, q]));
 
-            for (const questionId in userAnswers) {
-                const question = questionsData.find(q => q.id === parseInt(questionId));
-                if (question) {
-                    const selectedOptionIndex = userAnswers[questionId];
+                // 3. 遍历用户答案，通过Map快速查找问题
+                for (const [questionId, selectedOptionIndex] of Object.entries(userAnswers)) {
+                    const question = questionMap.get(parseInt(questionId));
+                    if (!question) continue;
+
                     const selectedOption = question.options[selectedOptionIndex];
-
-                    for (const dimension in selectedOption.scores) {
+                    // 累加维度分数
+                    for (const [dimension, score] of Object.entries(selectedOption.scores || {})) {
                         if (dimension !== "情感") {
-                            scores[dimension] = (scores[dimension] || 0) + selectedOption.scores[dimension];
+                            scores[dimension] = (scores[dimension] || 0) + score;
                         }
                     }
-
-                    scores["年上倾向"] += selectedOption.ageTendency.年上 || 0;
-                    scores["年下倾向"] += selectedOption.ageTendency.年下 || 0;
+                    // 累历年上年下倾向
+                    scores["年上倾向"] += selectedOption.ageTendency?.年上 || 0;
+                    scores["年下倾向"] += selectedOption.ageTendency?.年下 || 0;
                 }
-            }
-            
-            for (const dim in scores) {
-                if (scores[dim] < 0) {
-                    scores[dim] = 0;
-                }
-            }
+                
+                // 分数下限修正
+                Object.keys(scores).forEach(dim => {
+                    scores[dim] = Math.max(0, scores[dim]);
+                });
 
-            const totalAgeScore = scores["年上倾向"] + scores["年下倾向"];
-            if (totalAgeScore > 0) {
-                scores["年上倾向_标准化"] = Math.round((scores["年上倾向"] / totalAgeScore) * 100);
+                // 标准化年上年下倾向
+                const totalAgeScore = scores["年上倾向"] + scores["年下倾向"];
+                if (totalAgeScore > 0) {
+                    scores["年上倾向_标准化"] = Math.round((scores["年上倾向"] / totalAgeScore) * 100);
+                } else {
+                    scores["年上倾向_标准化"] = 50;
+                }
                 scores["年下倾向_标准化"] = 100 - scores["年上倾向_标准化"];
-            } else {
+            } catch (e) {
+                console.error('分数计算出错:', e);
+                // 兜底默认值，避免卡死
                 scores["年上倾向_标准化"] = 50;
                 scores["年下倾向_标准化"] = 50;
             }
         }
 
-        // 获取某类别的顶级维度
+        // 缓存维度分类前缀，避免重复字符串操作
+        const DIMENSION_PREFIXES = {
+            coreAttraction: "核心引力",
+            primaryProvision: "主要供给",
+            powerStructure: "权力结构",
+            interactionMode: "互动模式",
+            relationshipBoundary: "关系边界",
+            emotionalExpression: "情绪",
+            conflictResponse: "冲突应对"
+        };
+
+        // 获取某类别的顶级维度（优化：提前过滤，减少循环）
         function getTopDimensionsByCategory(categoryPrefix, count = 1) {
-            const relevantDimensions = Object.keys(scores).filter(dim => 
-                dim.startsWith(categoryPrefix) && dim !== "情感"
-            );
-            const sortedDimensions = relevantDimensions.sort((a, b) => scores[b] - scores[a]);
-            return sortedDimensions.slice(0, count).filter(dim => scores[dim] > 0);
+            if (!scores) return [];
+            return Object.keys(scores)
+                .filter(dim => dim.startsWith(categoryPrefix) && dim !== "情感")
+                .sort((a, b) => scores[b] - scores[a])
+                .slice(0, count)
+                .filter(dim => scores[dim] > 0);
         }
 
         // 生成核心驱动力文本
-        function getCoreDriversText(scores) {
+        function getCoreDriversText() {
             let text = "你的亲密关系最核心的驱动力在于：";
-            const topCoreAttraction = getTopDimensionsByCategory("核心引力");
-            const topPrimaryProvision = getTopDimensionsByCategory("主要供给");
+            const topCoreAttraction = getTopDimensionsByCategory(DIMENSION_PREFIXES.coreAttraction);
+            const topPrimaryProvision = getTopDimensionsByCategory(DIMENSION_PREFIXES.primaryProvision);
 
             if (topCoreAttraction.length > 0) {
                 const attractionDim = topCoreAttraction[0];
-                if (attractionDim === "核心引力(精神)") {
-                    text += "你深切渴望与伴侣在思想和灵魂层面达到高度共鸣，被对方的智慧与深度所吸引；";
-                } else if (attractionDim === "核心引力(欲望)") {
-                    text += "你追求与伴侣之间强烈的激情与吸引力，享受关系中的张力与活力；";
-                }
+                text += attractionDim === "核心引力(精神)" 
+                    ? "你深切渴望与伴侣在思想和灵魂层面达到高度共鸣，被对方的智慧与深度所吸引；"
+                    : "你追求与伴侣之间强烈的激情与吸引力，享受关系中的张力与活力；";
             }
 
             if (topPrimaryProvision.length > 0) {
                 const provisionDim = topPrimaryProvision[0];
-                if (provisionDim === "主要供给(安全感)") {
-                    text += "同时，你将关系视为避风港，最需要的是稳定、可靠和无条件的安全感。";
-                } else if (provisionDim === "主要供给(价值感)") {
-                    text += "同时，你渴望在关系中被伴侣肯定和需要，从中获得自我价值的实现。";
-                } else if (provisionDim === "主要供给(刺激感)") {
-                    text += "同时，你厌倦平淡，期待关系能持续带来新鲜感和激动人心的体验。";
-                }
+                const provisionTexts = {
+                    "主要供给(安全感)": "同时，你将关系视为避风港，最需要的是稳定、可靠和无条件的安全感。",
+                    "主要供给(价值感)": "同时，你渴望在关系中被伴侣肯定和需要，从中获得自我价值的实现。",
+                    "主要供给(刺激感)": "同时，你厌倦平淡，期待关系能持续带来新鲜感和激动人心的体验。"
+                };
+                text += provisionTexts[provisionDim] || "";
             }
             return `<p>${text}</p>`;
         }
 
-        // 生成关系倾向与模式文本
-        function getTendenciesPatternsText(scores) {
+        // 生成关系倾向与模式文本（优化：使用对象映射减少if-else）
+        function getTendenciesPatternsText() {
             let text = "在亲密关系的日常互动中，你展现出以下倾向和模式：";
-            const topPowerStructure = getTopDimensionsByCategory("权力结构");
-            const topInteractionMode = getTopDimensionsByCategory("互动模式");
-            const topRelationshipBoundary = getTopDimensionsByCategory("关系边界");
-            const topEmotionalExpression = getTopDimensionsByCategory("情绪");
-            const topConflictResponse = getTopDimensionsByCategory("冲突应对");
+            const patternMappings = [
+                { prefix: DIMENSION_PREFIXES.powerStructure, map: {
+                    "权力结构(支配)": "在决策和引导方面，你倾向于掌控关系的主导权。",
+                    "权力结构(依从)": "你乐于跟随伴侣的决策，享受被引领的感觉。",
+                    "权力结构(对等)": "你寻求关系中的平等与相互尊重，共同做出决策。"
+                }},
+                { prefix: DIMENSION_PREFIXES.interactionMode, map: {
+                    "互动模式(协作)": "与伴侣的相处中，你重视共同协作解决问题，携手面对生活。",
+                    "互动模式(养成)": "你享受在关系中培养彼此，共同成长与进步的过程。",
+                    "互动模式(博弈)": "你可能享受关系中的推拉与试探，喜欢充满张力的互动。"
+                }},
+                { prefix: DIMENSION_PREFIXES.relationshipBoundary, map: {
+                    "关系边界(捆绑)": "在个人空间上，你渴望与伴侣深度融合，共享大部分生活。",
+                    "关系边界(独立)": "你重视彼此的个人空间，保持适度的独立性。"
+                }},
+                { prefix: DIMENSION_PREFIXES.emotionalExpression, map: {
+                    "情绪(内敛)": "表达情感时，你偏爱用行动代替语言，不轻易流露内心。",
+                    "情绪(外放)": "表达情感时，你偏爱直接倾诉，乐于分享内心的感受。"
+                }},
+                { prefix: DIMENSION_PREFIXES.conflictResponse, map: {
+                    "冲突应对(掌控)": "面对冲突时，你倾向于快速解决问题，主导矛盾的化解。",
+                    "冲突应对(包容)": "面对冲突时，你倾向于包容对方的情绪，以和为贵。"
+                }}
+            ];
 
-            if (topPowerStructure.length > 0) {
-                const psDim = topPowerStructure[0];
-                if (psDim === "权力结构(支配)") text += `在决策和引导方面，你倾向于${dimensionDescriptions[psDim].replace("你在关系中倾向于", "")}。`;
-                else if (psDim === "权力结构(依从)") text += `你乐于${dimensionDescriptions[psDim].replace("你倾向于", "")}。`;
-                else if (psDim === "权力结构(对等)") text += `你寻求${dimensionDescriptions[psDim].replace("你追求", "")}。`;
-            }
+            // 遍历映射表，拼接文本
+            patternMappings.forEach(item => {
+                const topDim = getTopDimensionsByCategory(item.prefix)[0];
+                if (topDim) text += item.map[topDim] || "";
+            });
 
-            if (topInteractionMode.length > 0) {
-                const imDim = topInteractionMode[0];
-                if (imDim === "互动模式(协作)") text += `与伴侣的相处中，你重视${dimensionDescriptions[imDim].replace("你享受与伴侣作为“一个团队”", "")}。`;
-                else if (imDim === "互动模式(养成)") text += `你享受${dimensionDescriptions[imDim].replace("你享受在关系中", "")}。`;
-                else if (imDim === "互动模式(博弈)") text += `你可能享受${dimensionDescriptions[imDim].replace("你享受关系中", "")}。`;
-            }
-
-            if (topRelationshipBoundary.length > 0) {
-                const rbDim = topRelationshipBoundary[0];
-                if (rbDim === "关系边界(捆绑)") text += `在个人空间上，你渴望${dimensionDescriptions[rbDim].replace("你倾向于模糊彼此界限，", "")}。`;
-                else if (rbDim === "关系边界(独立)") text += `你重视${dimensionDescriptions[rbDim].replace("你倾向于", "")}。`;
-            }
-
-            if (topEmotionalExpression.length > 0) {
-                const eeDim = topEmotionalExpression[0];
-                if (eeDim === "情绪(内敛)") text += `表达情感时，你偏爱${dimensionDescriptions[eeDim].replace("你偏爱", "")}。`;
-                else if (eeDim === "情绪(外放)") text += `表达情感时，你偏爱${dimensionDescriptions[eeDim].replace("你偏爱", "")}。`;
-            }
-
-            if (topConflictResponse.length > 0) {
-                const crDim = topConflictResponse[0];
-                if (crDim === "冲突应对(掌控)") text += `面对冲突时，你倾向于${dimensionDescriptions[crDim].replace("你倾向于", "")}。`;
-                else if (crDim === "冲突应对(包容)") text += `面对冲突时，你倾向于${dimensionDescriptions[crDim].replace("你倾向于", "")}。`;
-            }
             return `<p>${text}</p>`;
         }
 
-        // 生成关系优势文本
-        function getStrengthsText(scores) {
-            let strengths = [];
+        // 生成关系优势文本（优化：数组预定义，减少条件判断）
+        function getStrengthsText() {
+            const strengthRules = [
+                { scoreKey: "主要供给(安全感)", min1: 15, text1: "能够为伴侣提供稳定和可预测性的关系基础，是坚实的依靠。", min2: 8, text2: "重视关系的稳定性和安全性。" },
+                { scoreKey: "主要供给(价值感)", min1: 10, text1: "善于发现并肯定他人的价值，也能在关系中找到自我实现的途径。" },
+                { scoreKey: "核心引力(精神)", min1: 10, text1: "追求精神层面的深度契合，能够与伴侣进行有意义的交流和共同成长。" },
+                { scoreKey: "互动模式(协作)", min1: 10, text1: "是关系中的优秀合作者，乐于与伴侣共同面对和解决问题。" },
+                { scoreKey: "权力结构(对等)", min1: 8, text1: "主张关系平等，尊重彼此的独立性和决策权。" },
+                { scoreKey: "冲突应对(包容)", min1: 8, text1: "在冲突中展现出良好的包容性和理解力，有助于化解矛盾。" },
+                { scoreKey: "关系边界(独立)", min1: 8, text1: "能够保持自我独立，尊重彼此的个人空间。" }
+            ];
 
-            if (scores["主要供给(安全感)"] > 15) strengths.push("能够为伴侣提供稳定和可预测性的关系基础，是坚实的依靠。");
-            else if (scores["主要供给(安全感)"] > 8) strengths.push("重视关系的稳定性和安全性。");
-            if (scores["主要供给(价值感)"] > 10) strengths.push("善于发现并肯定他人的价值，也能在关系中找到自我实现的途径。");
-            if (scores["核心引力(精神)"] > 10) strengths.push("追求精神层面的深度契合，能够与伴侣进行有意义的交流和共同成长。");
-            if (scores["互动模式(协作)"] > 10) strengths.push("是关系中的优秀合作者，乐于与伴侣共同面对和解决问题。");
-            if (scores["权力结构(对等)"] > 8) strengths.push("主张关系平等，尊重彼此的独立性和决策权。");
-            if (scores["冲突应对(包容)"] > 8) strengths.push("在冲突中展现出良好的包容性和理解力，有助于化解矛盾。");
-            if (scores["关系边界(独立)"] > 8) strengths.push("能够保持自我独立，尊重彼此的个人空间。");
+            const strengths = [];
+            strengthRules.forEach(rule => {
+                const score = scores[rule.scoreKey] || 0;
+                if (score >= rule.min1) {
+                    strengths.push(rule.text1);
+                } else if (rule.min2 && score >= rule.min2) {
+                    strengths.push(rule.text2);
+                }
+            });
 
-
-            let resultHtml = "";
-            if (strengths.length > 0) {
-                resultHtml += "<p>" + strengths.join("") + "</p>";
-            } else {
-                 resultHtml += "<p>你的关系模式具有独特的魅力，在多个方面展现出积极的特质，能够为亲密关系带来正向的能量。</p>";
-            }
-
-            return resultHtml;
+            return strengths.length > 0 
+                ? `<p>${strengths.join("")}</p>`
+                : "<p>你的关系模式具有独特的魅力，在多个方面展现出积极的特质，能够为亲密关系带来正向的能量。</p>";
         }
 
-        // 渲染结果页面
-        function renderResults() {
-            dimensionAnalysisDiv.innerHTML = '';
-            coreDriversAnalysisDiv.innerHTML = '';
-            tendenciesPatternsAnalysisDiv.innerHTML = '';
-            strengthsAnalysisDiv.innerHTML = '';
-            archetypeResultDiv.innerHTML = '';
-
-            // 年上年下倾向显示（仅显示得分，不显示类型描述）
-            const olderScore = scores["年上倾向_标准化"] || 0;
-            const youngerScore = scores["年下倾向_标准化"] || 0;
-            
-            ageIndicator.style.left = `${olderScore}%`;
-            ageValue.style.left = `${olderScore}%`;
-            ageValue.textContent = `${olderScore}分`;
-            
-            // 直接显示得分
-            olderScoreEl.textContent = olderScore;
-            youngerScoreEl.textContent = youngerScore;
-
-            // 维度分析（排除情感维度）
-            const filteredDimensions = Object.keys(scores).filter(dim => {
-                return scores[dim] >= 5 && 
-                       !dim.includes("年上倾向") && 
-                       !dim.includes("年下倾向") &&
-                       dim !== "情感";
-            });
-            
-            if (filteredDimensions.length > 0) {
-                filteredDimensions.forEach(dim => {
-                    const score = scores[dim];
-                    const description = dimensionDescriptions[dim] || '';
-                    const dimEl = document.createElement('div');
-                    dimEl.innerHTML = `<h4>${dim} (得分: ${score})</h4><p>${description}</p>`;
-                    dimensionAnalysisDiv.appendChild(dimEl);
-                });
-            } else {
-                dimensionAnalysisDiv.innerHTML = "<p>没有达到5分以上的维度。</p>";
+        // 【根据用户要求修改：强制匹配到结果，不返回“未定型”】
+        function matchArchetype() {
+            if (!archetypeResults || archetypeResults.length === 0) {
+                return { name: "系统错误", description: "关系原型数据未能加载。" };
             }
 
-            // 核心关系驱动力
-            coreDriversAnalysisDiv.innerHTML = getCoreDriversText(scores);
+            // 1. 严格按照您的规则，优先计算年龄偏好类型
+            const olderScore = scores["年上倾向_标准化"] || 50;
+            const youngerScore = scores["年下倾向_标准化"] || 50;
+            const diff = olderScore - youngerScore;
+            let userAgePreference;
 
-            // 关系倾向与模式
-            tendenciesPatternsAnalysisDiv.innerHTML = getTendenciesPatternsText(scores);
+            if (diff > 20) {
+                userAgePreference = "年上";
+            } else if (diff < -20) {
+                userAgePreference = "年下";
+            } else {
+                userAgePreference = "平衡";
+            }
 
-            // 关系优势
-            strengthsAnalysisDiv.innerHTML = getStrengthsText(scores);
+            // 2. 筛选出所有符合该年龄偏好的原型（这是必须选取的范围）
+            const candidateArchetypes = archetypeResults.filter(
+                archetype => archetype.agePreference === userAgePreference
+            );
 
-            // 核心关系原型
-            let matchedArchetypes = [];
-            archetypeResults.forEach(archetype => {
-                let isMatch = true;
-                let matchScore = 0;
-                for (const criterionDim in archetype.criteria) {
-                    const criterion = archetype.criteria[criterionDim];
-                    const currentScore = scores[criterionDim] || 0;
-                    if (criterion.min && currentScore < criterion.min) {
-                        isMatch = false;
-                        break;
-                    }
-                    if (criterion.max && currentScore > criterion.max) {
-                        isMatch = false;
-                        break;
-                    }
-                    if (criterion.min) {
-                        matchScore += currentScore;
-                    }
-                }
-                
-                if (isMatch && archetype.agePreference) {
-                    // 仅匹配年龄偏好，不显示描述
-                    const ageScore = scores["年上倾向_标准化"] || 0;
-                    let userAgePreference = "平衡";
-                    if (ageScore > 60) userAgePreference = "年上";
-                    else if (ageScore < 40) userAgePreference = "年下";
+            // 异常处理：如果数据文件缺失了某个年龄段的原型（极低概率）
+            if (candidateArchetypes.length === 0) {
+                 return { name: `年上年下倾向：【${userAgePreference}】`, description: `系统错误：当前倾向类型下未能找到具体的原型匹配数据。` };
+            }
+
+            // 3. 计算所有候选原型的匹配度（强制匹配）
+            const scoredCandidates = candidateArchetypes.map(archetype => {
+                let totalScore = 0; // 核心评分：用户在该原型所有要求维度上的总得分
+                let criteriaMetCount = 0; // 次要评分：用户严格满足了多少个 min/max 条件
+
+                // 计算所有要求维度上的总得分，并检查是否满足严格标准
+                for (const [criterionDim, criterion] of Object.entries(archetype.criteria)) {
+                    const userScore = scores[criterionDim] || 0;
                     
-                    if (archetype.agePreference !== "平衡" && 
-                        archetype.agePreference !== userAgePreference) {
-                        isMatch = false;
+                    // 核心评分：直接累加用户在该维度上的分数（无论是否是否满足 min/max）
+                    totalScore += userScore; 
+
+                    // 次要评分：检查严格标准
+                    const metMin = !criterion.min || userScore >= criterion.min;
+                    const metMax = !criterion.max || userScore <= criterion.max;
+                    
+                    if (metMin && metMax) {
+                        criteriaMetCount++;
                     }
                 }
-                
-                if (isMatch) {
-                    matchedArchetypes.push({ ...archetype, matchScore });
-                }
+
+                return {
+                    ...archetype,
+                    totalScore,
+                    criteriaMetCount
+                };
             });
 
-            matchedArchetypes.sort((a, b) => b.matchScore - a.matchScore);
-
-            if (matchedArchetypes.length > 0) {
-                const mainArchetype = matchedArchetypes[0];
-                archetypeResultDiv.innerHTML = `<h3>${mainArchetype.name}</h3><p>${mainArchetype.description}</p>`;
-            } else {
-                const fallbackMatches = [];
-                archetypeResults.forEach(archetype => {
-                    let isFallbackMatch = true;
-                    let fallbackScore = 0;
-                    for (const criterionDim in archetype.criteria) {
-                        const criterion = archetype.criteria[criterionDim];
-                        const currentScore = scores[criterionDim] || 0;
-                        if (criterion.min && currentScore < criterion.min * 0.8) {
-                            isFallbackMatch = false;
-                            break;
-                        }
-                        if (criterion.max && currentScore > criterion.max * 1.2) {
-                            isFallbackMatch = false;
-                            break;
-                        }
-                        if (criterion.min) {
-                            fallbackScore += currentScore;
-                        }
-                    }
-                    if (isFallbackMatch) {
-                        fallbackMatches.push({ ...archetype, matchScore: fallbackScore });
-                    }
-                });
-                
-                if (fallbackMatches.length > 0) {
-                    fallbackMatches.sort((a, b) => b.matchScore - a.matchScore);
-                    const bestFit = fallbackMatches[0];
-                    archetypeResultDiv.innerHTML = `<h3>${bestFit.name}</h3><p>${bestFit.description}</p>`;
-                } else {
-                    archetypeResultDiv.innerHTML = `<h3>未能匹配到特定原型</h3><p>您的关系模式独特而复杂，包含了多种特质。请参考上方的维度解读，了解您的具体倾向。</p>`;
+            // 4. 排序并选择最佳匹配：
+            // 优先选择 totalScore 最高的，其次选择 criteriaMetCount 最高的（作为 tie-breaker）
+            scoredCandidates.sort((a, b) => {
+                if (b.totalScore !== a.totalScore) {
+                    return b.totalScore - a.totalScore; // 主要排序：总分最高
                 }
-            }
+                return b.criteriaMetCount - a.criteriaMetCount; // 次要排序：满足条件数最多
+            });
+
+            // 5. 返回排名第一的结果
+            return scoredCandidates[0];
+        }
 
 
-            // 雷达图（排除情感维度）
-            const filteredLabels = filteredDimensions;
-            const filteredDataValues = filteredLabels.map(dim => scores[dim]);
-
-            if (radarChart) {
-                radarChart.destroy();
-            }
-
-            if (filteredLabels.length > 0) {
-                let maxScoreValue = 0;
-                filteredLabels.forEach(dim => {
-                    if (scores[dim] > maxScoreValue) {
-                        maxScoreValue = scores[dim];
-                    }
+        // 优化后的结果渲染：批处理DOM操作，减少重排重绘
+        function renderResults() {
+            try {
+                // 1. 清空所有结果容器（一次性操作）
+                [dimensionAnalysisDiv, coreDriversAnalysisDiv, tendenciesPatternsAnalysisDiv, strengthsAnalysisDiv, archetypeResultDiv].forEach(div => {
+                    div.innerHTML = '';
                 });
-                const radarChartScaleMax = Math.max(20, Math.ceil((maxScoreValue + 5) / 5) * 5);
 
-                radarChart = new Chart(radarChartCanvas, {
-                    type: 'radar',
-                    data: {
-                        labels: filteredLabels,
-                        datasets: [{
-                            label: '你的关系模式倾向',
-                            data: filteredDataValues,
-                            backgroundColor: 'rgba(230, 167, 179, 0.6)',
-                            borderColor: 'rgba(230, 167, 179, 1)',
-                            borderWidth: 2,
-                            pointBackgroundColor: 'rgba(230, 167, 179, 1)',
-                            pointBorderColor: '#fff',
-                            pointHoverBackgroundColor: '#fff',
-                            pointHoverBorderColor: 'rgba(230, 167, 179, 1)'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: true,
-                        scales: {
-                            r: {
-                                angleLines: {
-                                    color: 'rgba(224, 224, 224, 0.8)'
-                                },
-                                grid: {
-                                    color: 'rgba(224, 224, 224, 0.8)'
-                                },
-                                pointLabels: {
-                                    color: 'var(--text-color)',
-                                    font: {
-                                        size: 14
+                // 2. 年上年下倾向显示 (逻辑不变，确保 OlderScore -> Right Position)
+                const olderScore = scores["年上倾向_标准化"] || 0;
+                const youngerScore = scores["年下倾向_标准化"] || 0;
+                
+                // 修正指示器位置：年上分数越高，越靠右
+                ageIndicator.style.left = `${olderScore}%`;
+                // ageValue.style.left = `${olderScore}%`; // 隐藏
+                // ageValue.textContent = `${olderScore}分`; // 隐藏
+
+                olderScoreEl.textContent = olderScore;
+                youngerScoreEl.textContent = youngerScore;
+
+                // 3. 维度分析（批处理HTML字符串，避免多次appendChild）
+                const filteredDimensions = Object.keys(scores).filter(dim => {
+                    return scores[dim] >= 5 && !dim.includes("年上倾向") && !dim.includes("年下倾向") && dim !== "情感";
+                });
+
+                let dimensionHtml = '';
+                if (filteredDimensions.length > 0) {
+                    filteredDimensions.forEach(dim => {
+                        const score = scores[dim];
+                        const description = dimensionDescriptions?.[dim] || '';
+                        dimensionHtml += `<div><h4>${dim} (得分: ${score})</h4><p>${description}</p></div>`;
+                    });
+                } else {
+                    dimensionHtml = "<p>没有达到5分以上的维度。</p>";
+                }
+                dimensionAnalysisDiv.innerHTML = dimensionHtml;
+
+                // 4. 核心驱动力、倾向模式、优势（一次性插入）
+                coreDriversAnalysisDiv.innerHTML = getCoreDriversText();
+                tendenciesPatternsAnalysisDiv.innerHTML = getTendenciesPatternsText();
+                strengthsAnalysisDiv.innerHTML = getStrengthsText();
+
+                // 5. 原型匹配
+                const mainArchetype = matchArchetype();
+                // 注意：这里使用 replace(/\n/g, '<br>') 来确保描述中的换行符在HTML中正确显示
+                archetypeResultDiv.innerHTML = `<h3>${mainArchetype.name}</h3><p>${mainArchetype.description.replace(/\n/g, '<br>')}</p>`;
+
+                // 6. 雷达图渲染（优化：延迟渲染+简化配置）
+                if (radarChart) {
+                    radarChart.destroy();
+                    radarChart = null;
+                }
+
+                if (filteredDimensions.length > 0) {
+                    radarChartCanvas.style.display = "block";
+                    const filteredDataValues = filteredDimensions.map(dim => scores[dim]);
+                    const maxScoreValue = Math.max(...filteredDataValues, 20);
+                    const radarChartScaleMax = Math.ceil((maxScoreValue + 5) / 5) * 5;
+
+                    // 使用requestAnimationFrame避免主线程阻塞
+                    requestAnimationFrame(() => {
+                        radarChart = new Chart(radarChartCanvas, {
+                            type: 'radar',
+                            data: {
+                                labels: filteredDimensions,
+                                datasets: [{
+                                    label: '你的关系模式倾向',
+                                    data: filteredDataValues,
+                                    backgroundColor: 'rgba(230, 167, 179, 0.6)',
+                                    borderColor: 'rgba(230, 167, 179, 1)',
+                                    borderWidth: 2,
+                                    pointBackgroundColor: 'rgba(230, 167, 179, 1)',
+                                    pointBorderColor: '#fff',
+                                    pointHoverBackgroundColor: '#fff',
+                                    pointHoverBorderColor: 'rgba(230, 167, 179, 1)'
+                            }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                animation: { duration: 500 }, // 缩短动画时长
+                                scales: {
+                                    r: {
+                                        angleLines: { color: 'rgba(224, 224, 224, 0.8)' },
+                                        grid: { color: 'rgba(224, 224, 224, 0.8)' },
+                                        pointLabels: { color: 'var(--text-color)', font: { size: 14 } },
+                                        ticks: {
+                                            beginAtZero: true,
+                                            max: radarChartScaleMax,
+                                            stepSize: Math.max(5, Math.ceil(radarChartScaleMax / 10)), // 减少刻度数
+                                            color: 'var(--text-color)',
+                                            backdropColor: 'transparent'
+                                        }
                                     }
                                 },
-                                ticks: {
-                                    beginAtZero: true,
-                                    max: radarChartScaleMax,
-                                    stepSize: Math.max(5, Math.ceil(radarChartScaleMax / 5 / 5) * 5),
-                                    color: 'var(--text-color)',
-                                    backdropColor: 'transparent'
+                                plugins: {
+                                    legend: { display: false } // 隐藏图例，减少绘制
                                 }
                             }
-                        },
-                        plugins: {
-                            legend: {
-                                labels: {
-                                    color: 'var(--text-color)',
-                                }
-                            }
-                        }
-                    }
-                });
-            } else {
-                radarChartCanvas.style.display = "none";
+                        });
+                    });
+                } else {
+                    radarChartCanvas.style.display = "none";
+                }
+            } catch (e) {
+                console.error('结果渲染出错:', e);
+                alert('结果生成失败，请重试');
+            } finally {
+                hideLoading();
             }
         }
 
@@ -788,7 +828,7 @@
                 return; 
             }
             
-            // Vika API配置
+            // Vika API配置 (假设这些变量已在别处定义或硬编码)
             const API_TOKEN = 'uskDUbM4CPy64coNePFs9Uk'; 
             const DATASHEET_ID = 'dstrXNob0ZGUawrLMg';
             const CODE_FIELD_NAME = 'code';
@@ -861,7 +901,6 @@
         verifyBtn.addEventListener('click', verifyCoupon);
         
         startTestBtn.addEventListener('click', () => {
-            // 确保问题数据已加载
             if (!questionsData || questionsData.length === 0) {
                 alert('测试数据加载失败，请刷新页面重试');
                 return;
@@ -882,14 +921,19 @@
         });
 
         nextBtn.addEventListener('click', () => {
-            if (currentQuestionIndex < questionsData.length - 1) {
+            if (currentQuestionIndex < (questionsData?.length || 0) - 1) {
                 currentQuestionIndex++;
                 renderQuestion();
                 updateProgressBar();
             } else {
-                calculateScores();
-                renderResults();
-                showScreen('result-screen');
+                // 显示加载状态，避免用户误以为卡死
+                showLoading();
+                // 使用setTimeout将计算逻辑放入宏任务，避免主线程阻塞
+                setTimeout(() => {
+                    calculateScores();
+                    renderResults();
+                    showScreen('result-screen');
+                }, 0);
             }
         });
 
@@ -907,10 +951,9 @@
 
         // 初始化检查
         window.addEventListener('load', () => {
-            if (typeof questionsData === 'undefined' || 
-                typeof archetypeResults === 'undefined' || 
-                typeof dimensionDescriptions === 'undefined') {
+            if (typeof questionsData === 'undefined' || typeof archetypeResults === 'undefined' || typeof dimensionDescriptions === 'undefined') {
                 console.error('数据加载失败，请确保data.js文件存在且正确引入');
+                alert('测试数据加载失败，请检查data.js文件是否正确引入');
             }
         });
     </script>
