@@ -186,15 +186,36 @@
         }
 
         .age-preference-container {
-            margin: 30px 0;
+            margin: 45px 0 30px; /* 增加了上边距给分数留出空间 */
             background-color: var(--primary-color);
             padding: 20px;
             border-radius: 8px;
+            position: relative;
+        }
+        
+        .final-score-display {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--accent-color);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 22px;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        .final-score-display .score-label {
+            font-size: 14px;
+            font-weight: normal;
+            margin-right: 8px;
         }
 
         .age-bar-container {
             width: 100%;
-            background: linear-gradient(to right, #b3d1e6, var(--accent-color));
+            background: linear-gradient(to right, #b3d1e6, var(--accent-color)); /* 蓝到粉渐变 */
             border-radius: 10px;
             margin: 10px 0;
             height: 30px;
@@ -220,11 +241,11 @@
         }
 
         .age-label.left {
-            color: #6b9bc2;
+            color: #6b9bc2; /* 蓝色 */
         }
 
         .age-label.right {
-            color: #d18d9b;
+            color: #d18d9b; /* 粉色 */
         }
 
         /* 隐藏浮动分数，避免视觉混淆 */
@@ -331,18 +352,17 @@
             <h2>你的亲密关系模式分析</h2>
             
             <div class="age-preference-container">
-                <h3>年上年下倾向（0-100分）</h3>
+                <!-- 醒目的年龄偏好光谱分数显示 -->
+                <div id="final-score-display" class="final-score-display">
+                    <span class="score-label">年龄偏好光谱</span>50
+                </div>
+                <h3>年龄偏好分析 (0-100分)</h3>
                 <div class="age-bar-container">
                     <div id="age-indicator" class="age-indicator" style="left: 50%"></div>
-                    <div id="age-value" class="age-value">50分</div>
                 </div>
                 <div class="age-labels">
-                    <span class="age-label left">年下</span>
-                    <span class="age-label right">年上</span>
-                </div>
-                <div class="age-scores">
-                    <span>年下倾向: <span id="younger-score">50</span>分</span>
-                    <span>年上倾向: <span id="older-score">50</span>分</span>
+                    <span class="age-label left">极端年下</span>
+                    <span class="age-label right">极端年上</span>
                 </div>
             </div>
             
@@ -373,6 +393,7 @@
         let currentQuestionIndex = 0;
         let userAnswers = {};
         let scores = {};
+        let ageSpectrumScore = 50; // 新增：单一的年龄偏好光谱分数，0为极端年下，100为极端年上
         let radarChart = null;
 
         // DOM元素
@@ -393,18 +414,16 @@
 
         const resultScreen = document.getElementById('result-screen');
         const dimensionAnalysisDiv = document.getElementById('dimension-analysis');
-        const coreDriversAnalysisDiv = document.getElementById('core-drivers-analysis');
-        const tendenciesPatternsAnalysisDiv = document.getElementById('tendencies-patterns-analysis');
-        const strengthsAnalysisDiv = document.getElementById('strengths-analysis');
+        const coreDriversAnalysisDiv = document.getElementById('core-drivers-analysis'); // 保留
+        const tendenciesPatternsAnalysisDiv = document.getElementById('tendencies-patterns-analysis'); // 保留
+        const strengthsAnalysisDiv = document.getElementById('strengths-analysis'); // 保留
         const archetypeResultDiv = document.getElementById('archetype-result');
         const restartBtn = document.getElementById('restart-btn');
         const radarChartCanvas = document.getElementById('radarChart');
         
         const ageIndicator = document.getElementById('age-indicator');
-        const ageValue = document.getElementById('age-value');
-        const youngerScoreEl = document.getElementById('younger-score');
-        const olderScoreEl = document.getElementById('older-score');
         const loadingOverlay = document.getElementById('loading-overlay');
+        const finalScoreDisplay = document.getElementById('final-score-display'); // 新增
 
         // 显示加载状态
         function showLoading() {
@@ -475,20 +494,17 @@
 
         // 优化后的分数计算：减少重复遍历，缓存数据
         function calculateScores() {
+            // 重置维度分数
+            scores = {};
+            const allDimensions = Object.keys(dimensionDescriptions || {});
+            allDimensions.forEach(dim => { scores[dim] = 0; });
+            
+            // 重置年上和年下原始分
+            let olderRawScore = 0;
+            let youngerRawScore = 0;
+
             try {
-                scores = {};
-                // 1. 提前缓存所有维度，避免重复遍历Object.keys
-                const allDimensions = Object.keys(dimensionDescriptions || {});
-                allDimensions.forEach(dim => {
-                    scores[dim] = 0;
-                });
-                scores["年上倾向"] = 0;
-                scores["年下倾向"] = 0;
-
-                // 2. 提前将questionsData转为Map，减少find的时间复杂度（O(n)→O(1)）
                 const questionMap = new Map(questionsData.map(q => [q.id, q]));
-
-                // 3. 遍历用户答案，通过Map快速查找问题
                 for (const [questionId, selectedOptionIndex] of Object.entries(userAnswers)) {
                     const question = questionMap.get(parseInt(questionId));
                     if (!question) continue;
@@ -496,33 +512,31 @@
                     const selectedOption = question.options[selectedOptionIndex];
                     // 累加维度分数
                     for (const [dimension, score] of Object.entries(selectedOption.scores || {})) {
-                        if (dimension !== "情感") {
-                            scores[dimension] = (scores[dimension] || 0) + score;
-                        }
+                        scores[dimension] = (scores[dimension] || 0) + score; 
                     }
-                    // 累历年上年下倾向
-                    scores["年上倾向"] += selectedOption.ageTendency?.年上 || 0;
-                    scores["年下倾向"] += selectedOption.ageTendency?.年下 || 0;
+                    // 累加年上年下原始分
+                    olderRawScore += selectedOption.ageTendency?.年上 || 0;
+                    youngerRawScore += selectedOption.ageTendency?.年下 || 0;
                 }
                 
-                // 分数下限修正
+                // 修正维度分数下限 (不包括年上/年下原始分)
                 Object.keys(scores).forEach(dim => {
-                    scores[dim] = Math.max(0, scores[dim]);
+                    if (dim !== "年上倾向" && dim !== "年下倾向") {
+                        scores[dim] = Math.max(0, scores[dim]);
+                    }
                 });
 
-                // 标准化年上年下倾向
-                const totalAgeScore = scores["年上倾向"] + scores["年下倾向"];
-                if (totalAgeScore > 0) {
-                    scores["年上倾向_标准化"] = Math.round((scores["年上倾向"] / totalAgeScore) * 100);
+                // 计算单一的年龄偏好光谱分数 (0 = 极端年下, 100 = 极端年上)
+                const totalAgeTendencyScore = olderRawScore + youngerRawScore;
+                if (totalAgeTendencyScore > 0) {
+                    // 公式：(年上原始分 / (年上原始分 + 年下原始分)) * 100
+                    ageSpectrumScore = Math.round((olderRawScore / totalAgeTendencyScore) * 100);
                 } else {
-                    scores["年上倾向_标准化"] = 50;
+                    ageSpectrumScore = 50; // 如果没有倾向选择，则为绝对平衡
                 }
-                scores["年下倾向_标准化"] = 100 - scores["年上倾向_标准化"];
             } catch (e) {
                 console.error('分数计算出错:', e);
-                // 兜底默认值，避免卡死
-                scores["年上倾向_标准化"] = 50;
-                scores["年下倾向_标准化"] = 50;
+                ageSpectrumScore = 50; // 发生错误时，默认为平衡
             }
         }
 
@@ -534,14 +548,15 @@
             interactionMode: "互动模式",
             relationshipBoundary: "关系边界",
             emotionalExpression: "情绪",
-            conflictResponse: "冲突应对"
+            conflictResponse: "冲突应对",
+            growthPath: "成长路径" // 添加成长路径
         };
 
         // 获取某类别的顶级维度（优化：提前过滤，减少循环）
         function getTopDimensionsByCategory(categoryPrefix, count = 1) {
             if (!scores) return [];
             return Object.keys(scores)
-                .filter(dim => dim.startsWith(categoryPrefix) && dim !== "情感")
+                .filter(dim => dim.startsWith(categoryPrefix) && dim !== "情感") // 排除“情感”以专注于特定维度
                 .sort((a, b) => scores[b] - scores[a])
                 .slice(0, count)
                 .filter(dim => scores[dim] > 0);
@@ -549,15 +564,20 @@
 
         // 生成核心驱动力文本
         function getCoreDriversText() {
-            let text = "你的亲密关系最核心的驱动力在于：";
+            let text = "";
             const topCoreAttraction = getTopDimensionsByCategory(DIMENSION_PREFIXES.coreAttraction);
             const topPrimaryProvision = getTopDimensionsByCategory(DIMENSION_PREFIXES.primaryProvision);
 
             if (topCoreAttraction.length > 0) {
                 const attractionDim = topCoreAttraction[0];
-                text += attractionDim === "核心引力(精神)" 
-                    ? "你深切渴望与伴侣在思想和灵魂层面达到高度共鸣，被对方的智慧与深度所吸引；"
-                    : "你追求与伴侣之间强烈的激情与吸引力，享受关系中的张力与活力；";
+                text += "你的亲密关系最核心的驱动力在于：";
+                if (attractionDim === "核心引力(精神)") {
+                    text += "你深切渴望与伴侣在思想和灵魂层面达到高度共鸣，被对方的智慧与深度所吸引；";
+                } else if (attractionDim === "核心引力(情感)") {
+                    text += "你主要被伴侣的情感连接、共情能力和无条件的接纳所吸引，重视情感的温暖和慰藉；";
+                } else if (attractionDim === "核心引力(欲望)") {
+                     text += "你主要被伴侣的原始魅力、掌控感或身体吸引力所牵引，享受充满张力和激情的互动；";
+                }
             }
 
             if (topPrimaryProvision.length > 0) {
@@ -567,14 +587,17 @@
                     "主要供给(价值感)": "同时，你渴望在关系中被伴侣肯定和需要，从中获得自我价值的实现。",
                     "主要供给(刺激感)": "同时，你厌倦平淡，期待关系能持续带来新鲜感和激动人心的体验。"
                 };
-                text += provisionTexts[provisionDim] || "";
+                text += (text ? " " : "你的亲密关系最核心的驱动力在于：") + (provisionTexts[provisionDim] || "");
             }
-            return `<p>${text}</p>`;
+
+            return `<p>${text || "你的核心驱动力较为均衡，需要多方面的情感满足。"}</p>`;
         }
 
         // 生成关系倾向与模式文本（优化：使用对象映射减少if-else）
         function getTendenciesPatternsText() {
-            let text = "在亲密关系的日常互动中，你展现出以下倾向和模式：";
+            let text = "";
+            const patternParts = [];
+
             const patternMappings = [
                 { prefix: DIMENSION_PREFIXES.powerStructure, map: {
                     "权力结构(支配)": "在决策和引导方面，你倾向于掌控关系的主导权。",
@@ -597,14 +620,27 @@
                 { prefix: DIMENSION_PREFIXES.conflictResponse, map: {
                     "冲突应对(掌控)": "面对冲突时，你倾向于快速解决问题，主导矛盾的化解。",
                     "冲突应对(包容)": "面对冲突时，你倾向于包容对方的情绪，以和为贵。"
+                }},
+                { prefix: DIMENSION_PREFIXES.growthPath, map: {
+                    "成长路径(引领)": "在关系中，你倾向于扮演引导者的角色，享受带领伴侣共同进步的过程。",
+                    "成长路径(挑战)": "你乐于在关系中与伴侣相互激发、共同成长，认为适度挑战能促进彼此提升。"
                 }}
             ];
 
             // 遍历映射表，拼接文本
             patternMappings.forEach(item => {
                 const topDim = getTopDimensionsByCategory(item.prefix)[0];
-                if (topDim) text += item.map[topDim] || "";
+                if (topDim && item.map[topDim]) {
+                    patternParts.push(item.map[topDim]);
+                }
             });
+
+            text = "在亲密关系的日常互动中，你展现出以下倾向和模式：";
+            if (patternParts.length > 0) {
+                text += patternParts.join(" "); // 使用空格连接各个倾向描述
+            } else {
+                text += "你的互动模式较为灵活，没有特别突出的倾向。";
+            }
 
             return `<p>${text}</p>`;
         }
@@ -618,7 +654,9 @@
                 { scoreKey: "互动模式(协作)", min1: 10, text1: "是关系中的优秀合作者，乐于与伴侣共同面对和解决问题。" },
                 { scoreKey: "权力结构(对等)", min1: 8, text1: "主张关系平等，尊重彼此的独立性和决策权。" },
                 { scoreKey: "冲突应对(包容)", min1: 8, text1: "在冲突中展现出良好的包容性和理解力，有助于化解矛盾。" },
-                { scoreKey: "关系边界(独立)", min1: 8, text1: "能够保持自我独立，尊重彼此的个人空间。" }
+                { scoreKey: "关系边界(独立)", min1: 8, text1: "能够保持自我独立，尊重彼此的个人空间。" },
+                { scoreKey: "情绪(外放)", min1: 8, text1: "情感表达直率真诚，能为关系注入活力和热情。" },
+                { scoreKey: "成长路径(引领)", min1: 8, text1: "具备引导和培养他人的能力，能帮助伴侣实现自我提升。" }
             ];
 
             const strengths = [];
@@ -632,81 +670,55 @@
             });
 
             return strengths.length > 0 
-                ? `<p>${strengths.join("")}</p>`
+                ? `<p>${strengths.join(" ")}</p>` // 使用空格连接各个优势描述
                 : "<p>你的关系模式具有独特的魅力，在多个方面展现出积极的特质，能够为亲密关系带来正向的能量。</p>";
         }
 
-        // 【根据用户要求修改：强制匹配到结果，不返回“未定型”】
+        // 直接根据五级分类匹配原型（移除映射逻辑）
         function matchArchetype() {
             if (!archetypeResults || archetypeResults.length === 0) {
                 return { name: "系统错误", description: "关系原型数据未能加载。" };
             }
 
-            // 1. 严格按照您的规则，优先计算年龄偏好类型
-            const olderScore = scores["年上倾向_标准化"] || 50;
-            const youngerScore = scores["年下倾向_标准化"] || 50;
-            const diff = olderScore - youngerScore;
-            let userAgePreference;
-
-            if (diff > 20) {
-                userAgePreference = "年上";
-            } else if (diff < -20) {
-                userAgePreference = "年下";
-            } else {
-                userAgePreference = "平衡";
+            // 1. 直接计算五级分类，不做任何映射
+            let ageCategory;
+            if (ageSpectrumScore > 75) { // 76-100：极端年上
+                ageCategory = "极端年上";
+            } else if (ageSpectrumScore > 55) { // 56-75：偏向年上
+                ageCategory = "偏向年上";
+            } else if (ageSpectrumScore >= 45) { // 45-55：平衡
+                ageCategory = "平衡";
+            } else if (ageSpectrumScore >= 25) { // 25-44：偏向年下
+                ageCategory = "偏向年下";
+            } else { // 0-24：极端年下
+                ageCategory = "极端年下";
             }
+            
+            // 2. 直接根据五级分类筛选原型（关键修改：移除合并映射）
+            const candidateArchetypes = archetypeResults.filter(archetype => {
+                return archetype.agePreference === ageCategory;
+            });
 
-            // 2. 筛选出所有符合该年龄偏好的原型（这是必须选取的范围）
-            const candidateArchetypes = archetypeResults.filter(
-                archetype => archetype.agePreference === userAgePreference
-            );
-
-            // 异常处理：如果数据文件缺失了某个年龄段的原型（极低概率）
             if (candidateArchetypes.length === 0) {
-                 return { name: `年上年下倾向：【${userAgePreference}】`, description: `系统错误：当前倾向类型下未能找到具体的原型匹配数据。` };
+                 return { name: `【${ageCategory}】`, description: `当前${ageCategory}倾向下暂无匹配的关系原型，请完善测试数据。` };
             }
 
-            // 3. 计算所有候选原型的匹配度（强制匹配）
+            // 3. 在候选原型中，计算匹配度并选出最优
             const scoredCandidates = candidateArchetypes.map(archetype => {
-                let totalScore = 0; // 核心评分：用户在该原型所有要求维度上的总得分
-                let criteriaMetCount = 0; // 次要评分：用户严格满足了多少个 min/max 条件
-
-                // 计算所有要求维度上的总得分，并检查是否满足严格标准
+                let totalScore = 0;
                 for (const [criterionDim, criterion] of Object.entries(archetype.criteria)) {
                     const userScore = scores[criterionDim] || 0;
-                    
-                    // 核心评分：直接累加用户在该维度上的分数（无论是否是否满足 min/max）
-                    totalScore += userScore; 
-
-                    // 次要评分：检查严格标准
-                    const metMin = !criterion.min || userScore >= criterion.min;
-                    const metMax = !criterion.max || userScore <= criterion.max;
-                    
-                    if (metMin && metMax) {
-                        criteriaMetCount++;
+                    // 仅当用户分数满足最低要求时，才计入总分
+                    if (!criterion.min || userScore >= criterion.min) {
+                        totalScore += userScore; 
                     }
                 }
-
-                return {
-                    ...archetype,
-                    totalScore,
-                    criteriaMetCount
-                };
+                return { ...archetype, totalScore };
             });
 
-            // 4. 排序并选择最佳匹配：
-            // 优先选择 totalScore 最高的，其次选择 criteriaMetCount 最高的（作为 tie-breaker）
-            scoredCandidates.sort((a, b) => {
-                if (b.totalScore !== a.totalScore) {
-                    return b.totalScore - a.totalScore; // 主要排序：总分最高
-                }
-                return b.criteriaMetCount - a.criteriaMetCount; // 次要排序：满足条件数最多
-            });
-
-            // 5. 返回排名第一的结果
+            scoredCandidates.sort((a, b) => b.totalScore - a.totalScore);
             return scoredCandidates[0];
         }
-
 
         // 优化后的结果渲染：批处理DOM操作，减少重排重绘
         function renderResults() {
@@ -716,32 +728,25 @@
                     div.innerHTML = '';
                 });
 
-                // 2. 年上年下倾向显示 (逻辑不变，确保 OlderScore -> Right Position)
-                const olderScore = scores["年上倾向_标准化"] || 0;
-                const youngerScore = scores["年下倾向_标准化"] || 0;
+                // 2. 年龄偏好光谱显示
+                ageIndicator.style.left = `${ageSpectrumScore}%`; // 指示器位置
+                finalScoreDisplay.innerHTML = `<span class="score-label">年龄偏好光谱</span>${ageSpectrumScore}`; // 醒目分数显示
                 
-                // 修正指示器位置：年上分数越高，越靠右
-                ageIndicator.style.left = `${olderScore}%`;
-                // ageValue.style.left = `${olderScore}%`; // 隐藏
-                // ageValue.textContent = `${olderScore}分`; // 隐藏
-
-                olderScoreEl.textContent = olderScore;
-                youngerScoreEl.textContent = youngerScore;
-
                 // 3. 维度分析（批处理HTML字符串，避免多次appendChild）
+                // 过滤掉所有 ageTendency 和 情感 分数，只保留有描述的维度
                 const filteredDimensions = Object.keys(scores).filter(dim => {
-                    return scores[dim] >= 5 && !dim.includes("年上倾向") && !dim.includes("年下倾向") && dim !== "情感";
-                });
+                    return (dimensionDescriptions[dim] !== undefined) && scores[dim] >= 5;
+                }).sort((a, b) => scores[b] - scores[a]); // 按分数降序排序
 
                 let dimensionHtml = '';
                 if (filteredDimensions.length > 0) {
-                    filteredDimensions.forEach(dim => {
+                    dimensionHtml = filteredDimensions.map(dim => {
                         const score = scores[dim];
                         const description = dimensionDescriptions?.[dim] || '';
-                        dimensionHtml += `<div><h4>${dim} (得分: ${score})</h4><p>${description}</p></div>`;
-                    });
+                        return `<div><h4>${dim} (得分: ${score})</h4><p>${description}</p></div>`;
+                    }).join('');
                 } else {
-                    dimensionHtml = "<p>没有达到5分以上的维度。</p>";
+                    dimensionHtml = "<p>你展现了非常均衡的特质，没有特别突出的维度。</p>";
                 }
                 dimensionAnalysisDiv.innerHTML = dimensionHtml;
 
@@ -763,16 +768,19 @@
 
                 if (filteredDimensions.length > 0) {
                     radarChartCanvas.style.display = "block";
-                    const filteredDataValues = filteredDimensions.map(dim => scores[dim]);
-                    const maxScoreValue = Math.max(...filteredDataValues, 20);
-                    const radarChartScaleMax = Math.ceil((maxScoreValue + 5) / 5) * 5;
+                    // 只取分数最高的8个维度用于雷达图，避免拥挤
+                    const radarLabels = filteredDimensions.slice(0, 8);
+                    const filteredDataValues = radarLabels.map(dim => scores[dim]);
+                    const maxScoreValue = Math.max(...filteredDataValues, 10); // 确保图表有最低刻度
+                    // 将最大刻度向上取整到最近的5的倍数
+                    const radarChartScaleMax = Math.ceil(maxScoreValue / 5) * 5; 
 
                     // 使用requestAnimationFrame避免主线程阻塞
                     requestAnimationFrame(() => {
                         radarChart = new Chart(radarChartCanvas, {
                             type: 'radar',
                             data: {
-                                labels: filteredDimensions,
+                                labels: radarLabels,
                                 datasets: [{
                                     label: '你的关系模式倾向',
                                     data: filteredDataValues,
@@ -797,7 +805,7 @@
                                         ticks: {
                                             beginAtZero: true,
                                             max: radarChartScaleMax,
-                                            stepSize: Math.max(5, Math.ceil(radarChartScaleMax / 10)), // 减少刻度数
+                                            stepSize: Math.max(1, Math.ceil(radarChartScaleMax / 5)), // 减少刻度数
                                             color: 'var(--text-color)',
                                             backdropColor: 'transparent'
                                         }
@@ -933,7 +941,7 @@
                     calculateScores();
                     renderResults();
                     showScreen('result-screen');
-                }, 0);
+                }, 100); // 增加少量延迟以确保加载动画显示
             }
         });
 
@@ -941,6 +949,7 @@
             currentQuestionIndex = 0;
             userAnswers = {};
             scores = {};
+            ageSpectrumScore = 50; // 重置年龄偏好光谱分数
             if (radarChart) {
                 radarChart.destroy();
                 radarChart = null;
